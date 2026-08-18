@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Production Monitoring</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">Production Monitoring</div>
+            <ul class="nav-menu">
+                <li><a href="#home" class="nav-link">Home</a></li>
+                <li><a href="#dashboard" class="nav-link">Dashboard</a></li>
+                <li><a href="#alerts" class="nav-link">Alerts</a></li>
+                <li><a href="#reports" class="nav-link">Reports</a></li>
+                <li><a href="#contact" class="nav-link">Contact</a></li>
+            </ul>
+            <div class="hamburger">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+    </nav>
+
+    <section id="home" class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <h1>Real-time Production Monitoring</h1>
+                <p>Monitor your infrastructure and systems with real-time insights and alerts</p>
+                <button class="btn btn-primary" onclick="scrollToSection('dashboard')">Get Started</button>
+            </div>
+        </div>
+    </section>
+
+    <section id="dashboard" class="dashboard">
+        <div class="container">
+            <h2>Dashboard</h2>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-icon">📊</div>
+                    <h3>System Health</h3>
+                    <p class="metric-value">98.5%</p>
+                    <p class="metric-status status-good">Operational</p>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-icon">⚙️</div>
+                    <h3>Active Services</h3>
+                    <p class="metric-value">24/7</p>
+                    <p class="metric-status status-good">Running</p>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-icon">⏱️</div>
+                    <h3>Response Time</h3>
+                    <p class="metric-value">145ms</p>
+                    <p class="metric-status status-good">Optimal</p>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-icon">📈</div>
+                    <h3>Uptime</h3>
+                    <p class="metric-value">99.9%</p>
+                    <p class="metric-status status-good">Excellent</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="alerts" class="alerts">
+        <div class="container">
+            <h2>Recent Alerts</h2>
+            <div class="alerts-list">
+                <div class="alert-item alert-info">
+                    <span class="alert-badge">INFO</span>
+                    <div class="alert-content">
+                        <h4>Routine Maintenance Scheduled</h4>
+                        <p>System maintenance scheduled for 2:00 AM UTC</p>
+                    </div>
+                    <span class="alert-time">2 hours ago</span>
+                </div>
+                <div class="alert-item alert-warning">
+                    <span class="alert-badge">WARNING</span>
+                    <div class="alert-content">
+                        <h4>High Memory Usage Detected</h4>
+                        <p>Server memory usage at 85% on production-db-01</p>
+                    </div>
+                    <span class="alert-time">15 minutes ago</span>
+                </div>
+                <div class="alert-item alert-success">
+                    <span class="alert-badge">SUCCESS</span>
+                    <div class="alert-content">
+                        <h4>Deployment Successful</h4>
+                        <p>Version 2.5.1 deployed to production</p>
+                    </div>
+                    <span class="alert-time">1 hour ago</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="reports" class="reports">
+        <div class="container">
+            <h2>Reports</h2>
+            <div class="reports-grid">
+                <div class="report-card">
+                    <h3>Daily Report</h3>
+                    <p>Comprehensive daily system performance report</p>
+                    <button class="btn btn-secondary">Download PDF</button>
+                </div>
+                <div class="report-card">
+                    <h3>Weekly Summary</h3>
+                    <p>Weekly trends and anomalies analysis</p>
+                    <button class="btn btn-secondary">Download PDF</button>
+                </div>
+                <div class="report-card">
+                    <h3>Monthly Analysis</h3>
+                    <p>In-depth monthly performance metrics</p>
+                    <button class="btn btn-secondary">Download PDF</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="contact" class="contact">
+        <div class="container">
+            <h2>Get in Touch</h2>
+            <form class="contact-form" id="contactForm">
+                <div class="form-group">
+                    <label for="name">Name</label>
+                    <input type="text" id="name" name="name" required>
+                </div>
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" required>
+                </div>
+                <div class="form-group">
+                    <label for="message">Message</label>
+                    <textarea id="message" name="message" rows="5" required></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">Send Message</button>
+            </form>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 Production Monitoring. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
