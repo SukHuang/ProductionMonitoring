@@ -32,30 +32,45 @@ class ProductionFloor {
         const container = this.canvas.parentElement;
         this.canvas.width = container.clientWidth;
         this.canvas.height = container.clientHeight;
+        this.layoutStations();
     }
     
     initializeStations() {
         // Station layout: Assembly -> Quality -> Inspection -> (Repair) -> Packaging
+        // Positions are stored as ratios (0-1) so the floor scales with the canvas.
         const stationData = [
-            { name: 'Assembly', x: 80, y: 100, type: 'processing', color: '#3b82f6' },
-            { name: 'Quality Check', x: 220, y: 100, type: 'processing', color: '#8b5cf6' },
-            { name: 'Inspection', x: 360, y: 100, type: 'inspection', color: '#f59e0b', failureRate: 0.1 },
-            { name: 'Repair', x: 360, y: 250, type: 'repair', color: '#ef4444' },
-            { name: 'Packaging', x: 500, y: 100, type: 'processing', color: '#10b981' }
+            { name: 'Assembly', xRatio: 0.12, yRatio: 0.32, type: 'processing', color: '#3b82f6' },
+            { name: 'Quality Check', xRatio: 0.32, yRatio: 0.32, type: 'processing', color: '#8b5cf6' },
+            { name: 'Inspection', xRatio: 0.52, yRatio: 0.32, type: 'inspection', color: '#f59e0b', failureRate: 0.1 },
+            { name: 'Repair', xRatio: 0.52, yRatio: 0.7, type: 'repair', color: '#ef4444' },
+            { name: 'Packaging', xRatio: 0.75, yRatio: 0.32, type: 'processing', color: '#10b981' }
         ];
         
         this.stations = stationData.map(data => ({
             ...data,
+            x: 0,
+            y: 0,
             queue: [],
             currentUnit: null,
             processingTime: 2000,
             processingTimer: 0,
-            width: 60,
-            height: 60,
+            width: 100,
+            height: 100,
             processed: 0,
             failed: 0,
             repaired: 0
         }));
+        
+        this.layoutStations();
+    }
+    
+    // Converts each station's ratio position into actual canvas pixel coordinates.
+    layoutStations() {
+        if (!this.stations || this.stations.length === 0) return;
+        this.stations.forEach(station => {
+            station.x = station.xRatio * this.canvas.width;
+            station.y = station.yRatio * this.canvas.height;
+        });
     }
     
     setupEventListeners() {
@@ -164,8 +179,8 @@ class ProductionFloor {
         
         this.frameCount++;
         
-        // Spawn new units
-        this.spawnTimer += this.unitSpawnRate;
+        // Spawn new units (unitSpawnRate is expressed as units per second, animated at ~60fps)
+        this.spawnTimer += this.unitSpawnRate / 60;
         if (this.spawnTimer >= 1) {
             this.spawnUnit();
             this.spawnTimer -= 1;
@@ -188,80 +203,92 @@ class ProductionFloor {
     }
     
     spawnUnit() {
+        const entryStation = this.stations[0];
         const unit = {
             id: this.stats.unitsIn++,
             x: 10,
-            y: 100,
+            y: entryStation.y,
+            fromStation: -1,
             targetStation: 0,
             currentStation: -1,
             status: 'moving', // moving, processing, completed, failed, repaired
             failed: false,
             repaired: false,
-            size: 12,
+            size: 16,
             color: '#3b82f6'
         };
         this.units.push(unit);
     }
     
+    // Routes a unit that just finished processing at `station` to its next destination.
+    // The unit only travels here; it joins the destination queue once it arrives (see updateUnits).
+    routeUnit(unit, station, stationIdx) {
+        if (station.type === 'inspection') {
+            if (Math.random() < station.failureRate) {
+                unit.failed = true;
+                this.stats.unitsFailed++;
+                station.failed++;
+                
+                const repairStation = this.stations.find(s => s.type === 'repair');
+                unit.status = 'moving';
+                unit.fromStation = stationIdx;
+                unit.targetStation = this.stations.indexOf(repairStation);
+            } else {
+                // Passed inspection: skip straight to Packaging.
+                const packagingStation = this.stations.find(s => s.name === 'Packaging');
+                unit.status = 'moving';
+                unit.fromStation = stationIdx;
+                unit.targetStation = this.stations.indexOf(packagingStation);
+            }
+            return;
+        }
+        
+        if (station.type === 'repair') {
+            unit.repaired = true;
+            unit.failed = false;
+            this.stats.unitsRepaired++;
+            station.repaired++;
+            
+            // Repaired units go back through Inspection for a re-test.
+            const inspectionStation = this.stations.find(s => s.type === 'inspection');
+            unit.status = 'moving';
+            unit.fromStation = stationIdx;
+            unit.targetStation = this.stations.indexOf(inspectionStation);
+            return;
+        }
+        
+        const nextIdx = stationIdx + 1;
+        if (nextIdx < this.stations.length) {
+            unit.status = 'moving';
+            unit.fromStation = stationIdx;
+            unit.targetStation = nextIdx;
+        } else {
+            unit.status = 'completed';
+            this.stats.unitsCompleted++;
+        }
+    }
+    
     processStations() {
-        // Process each station
         this.stations.forEach((station, stationIdx) => {
-            // Move units from queue to processing
+            // Move the next queued unit into processing once the station is free.
             if (station.queue.length > 0 && !station.currentUnit) {
                 station.currentUnit = station.queue.shift();
                 station.currentUnit.currentStation = stationIdx;
+                station.currentUnit.status = 'processing';
+                station.currentUnit.x = station.x;
+                station.currentUnit.y = station.y;
                 station.processingTimer = 0;
             }
             
-            // Process current unit
+            // Advance processing on the current unit.
             if (station.currentUnit) {
                 station.processingTimer += 16 * this.speedMultiplier; // ~60fps
                 
                 if (station.processingTimer >= station.processingTime) {
                     const unit = station.currentUnit;
                     station.processed++;
-                    
-                    // Handle inspection logic
-                    if (station.type === 'inspection' && Math.random() < station.failureRate) {
-                        unit.failed = true;
-                        unit.status = 'failed';
-                        this.stats.unitsFailed++;
-                        station.failed++;
-                        
-                        // Route to repair
-                        const repairStation = this.stations.find(s => s.type === 'repair');
-                        if (repairStation) {
-                            unit.targetStation = this.stations.indexOf(repairStation);
-                            unit.status = 'moving';
-                            repairStation.queue.push(unit);
-                        }
-                    } else if (station.type === 'repair') {
-                        unit.repaired = true;
-                        unit.status = 'repaired';
-                        this.stats.unitsRepaired++;
-                        station.repaired++;
-                        
-                        // Route to next station after inspection (Packaging)
-                        const nextStation = this.stations.find(s => s.name === 'Packaging');
-                        if (nextStation) {
-                            unit.targetStation = this.stations.indexOf(nextStation);
-                            unit.status = 'moving';
-                            nextStation.queue.push(unit);
-                        }
-                    } else if (station.type === 'processing' || station.name === 'Packaging') {
-                        // Find next station
-                        const nextIdx = stationIdx + 1;
-                        if (nextIdx < this.stations.length) {
-                            unit.targetStation = nextIdx;
-                            unit.status = 'moving';
-                            this.stations[nextIdx].queue.push(unit);
-                        } else {
-                            unit.status = 'completed';
-                            this.stats.unitsCompleted++;
-                        }
-                    }
-                    
                     station.currentUnit = null;
+                    this.routeUnit(unit, station, stationIdx);
                 }
             }
         });
@@ -270,34 +297,27 @@ class ProductionFloor {
     updateUnits() {
         this.units.forEach(unit => {
             if (unit.status === 'moving') {
-                const station = this.stations[unit.currentStation + 1] || this.stations[unit.targetStation];
+                const station = this.stations[unit.targetStation];
                 if (!station) return;
                 
-                const targetX = station.x;
-                const targetY = station.y;
-                const speed = 1.5 * this.speedMultiplier;
-                
-                const dx = targetX - unit.x;
-                const dy = targetY - unit.y;
+                const speed = 2.5 * this.speedMultiplier;
+                const dx = station.x - unit.x;
+                const dy = station.y - unit.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
                 
                 if (distance > speed) {
                     unit.x += (dx / distance) * speed;
                     unit.y += (dy / distance) * speed;
                 } else {
-                    unit.x = targetX;
-                    unit.y = targetY;
-                    if (unit.currentStation + 1 === unit.targetStation) {
-                        unit.status = 'processing';
-                    }
+                    unit.x = station.x;
+                    unit.y = station.y;
+                    // Arrived: join the destination station's queue and wait to be processed.
+                    unit.status = 'queued';
+                    station.queue.push(unit);
                 }
-            } else if (unit.status === 'processing') {
-                const station = this.stations[unit.currentStation];
-                unit.x = station.x;
-                unit.y = station.y;
-            } else if (unit.status === 'completed' || unit.status === 'failed' || unit.status === 'repaired') {
+            } else if (unit.status === 'completed') {
                 unit.x = this.canvas.width - 20;
-                unit.y = 100 + Math.random() * 40;
+                unit.y = this.stations[0].y + Math.random() * 40;
             }
         });
         
@@ -339,20 +359,20 @@ class ProductionFloor {
             
             // Station border
             this.ctx.strokeStyle = station.color;
-            this.ctx.lineWidth = 2;
+            this.ctx.lineWidth = 3;
             this.ctx.strokeRect(station.x - station.width/2, station.y - station.height/2, station.width, station.height);
             
             // Station name
             this.ctx.fillStyle = '#1f2937';
-            this.ctx.font = 'bold 10px Arial';
+            this.ctx.font = 'bold 14px Arial';
             this.ctx.textAlign = 'center';
-            this.ctx.fillText(station.name, station.x, station.y - 40);
+            this.ctx.fillText(station.name, station.x, station.y - station.height/2 - 12);
             
             // Queue count
             const queueSize = station.queue.length + (station.currentUnit ? 1 : 0);
             this.ctx.fillStyle = '#ef4444';
-            this.ctx.font = 'bold 12px Arial';
-            this.ctx.fillText(queueSize.toString(), station.x + 35, station.y - 35);
+            this.ctx.font = 'bold 16px Arial';
+            this.ctx.fillText(queueSize.toString(), station.x + station.width/2 + 12, station.y - station.height/2);
         });
         
         // Draw connectors between stations
@@ -362,27 +382,33 @@ class ProductionFloor {
         for (let i = 0; i < this.stations.length - 1; i++) {
             const from = this.stations[i];
             const to = this.stations[i + 1];
-            if (!(i === 2 && to.name === 'Repair')) { // Skip direct line to repair
-                this.ctx.beginPath();
-                this.ctx.moveTo(from.x + from.width/2, from.y);
-                this.ctx.lineTo(to.x - to.width/2, to.y);
-                this.ctx.stroke();
-            }
+            if (to.type === 'repair') continue; // repair is only reached via the fail path below
+            this.ctx.beginPath();
+            this.ctx.moveTo(from.x + from.width/2, from.y);
+            this.ctx.lineTo(to.x - to.width/2, to.y);
+            this.ctx.stroke();
         }
         
-        // Draw repair loop
+        // Inspection passes go straight to Packaging, skipping Repair
+        const inspectionStation = this.stations.find(s => s.type === 'inspection');
+        const repairStation = this.stations.find(s => s.type === 'repair');
+        const packagingStation = this.stations.find(s => s.name === 'Packaging');
+        this.ctx.beginPath();
+        this.ctx.moveTo(inspectionStation.x + inspectionStation.width/2, inspectionStation.y);
+        this.ctx.lineTo(packagingStation.x - packagingStation.width/2, packagingStation.y);
+        this.ctx.stroke();
+        
+        // Fail path: Inspection -> Repair, then back to Inspection for a re-test
         this.ctx.strokeStyle = '#ef4444';
         this.ctx.setLineDash([3, 3]);
-        const inspectionStation = this.stations[2];
-        const repairStation = this.stations[3];
         this.ctx.beginPath();
-        this.ctx.moveTo(inspectionStation.x + inspectionStation.width/2, inspectionStation.y + inspectionStation.height/2);
-        this.ctx.lineTo(repairStation.x, repairStation.y - repairStation.height/2);
+        this.ctx.moveTo(inspectionStation.x - inspectionStation.width/4, inspectionStation.y + inspectionStation.height/2);
+        this.ctx.lineTo(repairStation.x - repairStation.width/4, repairStation.y - repairStation.height/2);
         this.ctx.stroke();
         
         this.ctx.beginPath();
-        this.ctx.moveTo(repairStation.x, repairStation.y + repairStation.height/2);
-        this.ctx.lineTo(this.stations[4].x, this.stations[4].y - this.stations[4].height/2);
+        this.ctx.moveTo(repairStation.x + repairStation.width/4, repairStation.y - repairStation.height/2);
+        this.ctx.lineTo(inspectionStation.x + inspectionStation.width/4, inspectionStation.y + inspectionStation.height/2);
         this.ctx.stroke();
         
         this.ctx.setLineDash([]);
@@ -406,7 +432,7 @@ class ProductionFloor {
             
             // Unit ID
             this.ctx.fillStyle = '#ffffff';
-            this.ctx.font = 'bold 8px Arial';
+            this.ctx.font = 'bold 10px Arial';
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'middle';
             this.ctx.fillText(unit.id.toString(), unit.x, unit.y);
@@ -484,8 +510,8 @@ class ProductionFloor {
         
         this.units.forEach(unit => {
             if (unit.status === 'processing') statusCounts.processing++;
-            else if (unit.status === 'failed') statusCounts.failed++;
-            else if (unit.status === 'repaired') statusCounts.repaired++;
+            else if (unit.failed && !unit.repaired && unit.status !== 'completed') statusCounts.failed++;
+            else if (unit.repaired && unit.status !== 'completed') statusCounts.repaired++;
         });
         
         if (statusCounts.processing > 0) {
