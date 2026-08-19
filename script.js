@@ -12,6 +12,7 @@ class ProductionFloor {
         this.isPaused = false;
         this.frameCount = 0;
         this.spawnTimer = 0;
+        this.serialCounter = 0; // never reset - guarantees every unit gets a unique serial number
         
         // Statistics
         this.stats = {
@@ -149,19 +150,20 @@ class ProductionFloor {
         this.isPaused = false;
         document.getElementById('startBtn').disabled = true;
         document.getElementById('pauseBtn').disabled = false;
-        this.animate();
+        // setInterval keeps ticking even when the tab is backgrounded, unlike requestAnimationFrame.
+        this.tickHandle = setInterval(() => this.tick(), 16);
     }
     
     pause() {
         this.isPaused = !this.isPaused;
         const btn = document.getElementById('pauseBtn');
         btn.textContent = this.isPaused ? '▶ Resume' : '⏸ Pause';
-        if (!this.isPaused) this.animate();
     }
     
     reset() {
         this.isRunning = false;
         this.isPaused = false;
+        clearInterval(this.tickHandle);
         this.units = [];
         this.frameCount = 0;
         this.stats = { unitsIn: 0, unitsCompleted: 0, unitsFailed: 0, unitsRepaired: 0 };
@@ -174,7 +176,7 @@ class ProductionFloor {
         this.draw();
     }
     
-    animate() {
+    tick() {
         if (!this.isRunning || this.isPaused) return;
         
         this.frameCount++;
@@ -198,14 +200,13 @@ class ProductionFloor {
         // Update UI
         this.updateStats();
         this.renderConfigPanel();
-        
-        requestAnimationFrame(() => this.animate());
     }
     
     spawnUnit() {
         const entryStation = this.stations[0];
+        this.stats.unitsIn++;
         const unit = {
-            id: this.stats.unitsIn++,
+            id: ++this.serialCounter,
             x: 10,
             y: entryStation.y,
             fromStation: -1,
@@ -214,7 +215,7 @@ class ProductionFloor {
             status: 'moving', // moving, processing, completed, failed, repaired
             failed: false,
             repaired: false,
-            size: 16,
+            size: 19,
             color: '#3b82f6'
         };
         this.units.push(unit);
@@ -373,6 +374,11 @@ class ProductionFloor {
             this.ctx.fillStyle = '#ef4444';
             this.ctx.font = 'bold 16px Arial';
             this.ctx.fillText(queueSize.toString(), station.x + station.width/2 + 12, station.y - station.height/2);
+            
+            // Processed count
+            this.ctx.fillStyle = '#16a34a';
+            this.ctx.font = 'bold 12px Arial';
+            this.ctx.fillText(`Processed: ${station.processed}`, station.x, station.y + station.height/2 + 14);
         });
         
         // Draw connectors between stations
@@ -413,8 +419,26 @@ class ProductionFloor {
         
         this.ctx.setLineDash([]);
         
-        // Draw units
+        // Draw units, spreading queued units into a small grid below their station so they don't overlap
+        const queuePositions = new Map();
+        const spacing = 42;
+        const perRow = 4;
+        this.stations.forEach(station => {
+            station.queue.forEach((qUnit, i) => {
+                const row = Math.floor(i / perRow);
+                const col = i % perRow;
+                const rowCount = Math.min(station.queue.length - row * perRow, perRow);
+                const rowStartX = station.x - ((rowCount - 1) * spacing) / 2;
+                queuePositions.set(qUnit, {
+                    x: rowStartX + col * spacing,
+                    y: station.y + station.height / 2 + 40 + row * spacing
+                });
+            });
+        });
+        
         this.units.forEach(unit => {
+            const pos = queuePositions.get(unit) || { x: unit.x, y: unit.y };
+            
             // Unit circle
             this.ctx.fillStyle = unit.color;
             if (unit.failed) this.ctx.fillStyle = '#ef4444';
@@ -422,20 +446,23 @@ class ProductionFloor {
             else if (unit.status === 'completed') this.ctx.fillStyle = '#06b6d4';
             
             this.ctx.beginPath();
-            this.ctx.arc(unit.x, unit.y, unit.size, 0, Math.PI * 2);
+            this.ctx.arc(pos.x, pos.y, unit.size, 0, Math.PI * 2);
             this.ctx.fill();
             
             // Unit border
             this.ctx.strokeStyle = '#ffffff';
-            this.ctx.lineWidth = 2;
+            this.ctx.lineWidth = 2.5;
             this.ctx.stroke();
             
-            // Unit ID
-            this.ctx.fillStyle = '#ffffff';
-            this.ctx.font = 'bold 10px Arial';
+            // Unit ID - dark outline behind white fill keeps it legible on any station color
+            this.ctx.font = 'bold 14px Arial';
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'middle';
-            this.ctx.fillText(unit.id.toString(), unit.x, unit.y);
+            this.ctx.lineWidth = 3;
+            this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.65)';
+            this.ctx.strokeText(unit.id.toString(), pos.x, pos.y);
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.fillText(unit.id.toString(), pos.x, pos.y);
         });
         
         // Draw legend
@@ -544,6 +571,7 @@ class ProductionFloor {
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     const floor = new ProductionFloor('productionCanvas');
+    window.floor = floor;
     floor.draw();
     
     console.log('%c🏭 Production Animation Floor Ready', 'font-size: 16px; font-weight: bold; color: #2563eb;');
